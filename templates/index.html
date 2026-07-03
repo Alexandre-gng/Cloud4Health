@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard Pharmacovigilance (Flask)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6f9; margin: 20px; color: #333; }
+        h1 { text-align: center; color: #2c3e50; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .form-card { margin-top: 20px; }
+        .form-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+        .form-row input, .form-row select, .form-row button { width: 100%; padding: 10px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 0.95em; box-sizing: border-box; }
+        .form-row button { background: #2c3e50; color: white; cursor: pointer; border: none; }
+        .form-row button:hover { background: #1f2d3a; }
+        .form-help { font-size: 0.9em; color: #666; margin-top: 8px; }
+        .status { text-align: center; font-size: 0.9em; color: #7f8c8d; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>📊 Suivi de Pharmacovigilance en Temps Réel (Flask)</h1>
+    <div class="status" id="status-text">Connexion aux données de la base NoSQL...</div>
+
+    <div class="grid">
+        <div class="card">
+            <h3>🔥 Top Médicaments par Score de Risque</h3>
+            <canvas id="riskChart"></canvas>
+        </div>
+        
+        <div class="card">
+            <h3>📈 Évolution Mensuelle des Signalements</h3>
+            <canvas id="timeChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card form-card">
+        <h3>➕ Pousser une donnée en temps réel</h3>
+        <div class="form-help">Choisis le type de donnée, remplis les champs, puis envoie vers MongoDB.</div>
+        <div class="form-row">
+            <select id="data-type">
+                <option value="risk">Score de risque</option>
+                <option value="temporal">Donnée temporelle</option>
+            </select>
+            <input id="field-1" type="text" placeholder="Drug name / report_month">
+            <input id="field-2" type="number" step="any" placeholder="custom_risk_score / total_reports">
+            <input id="field-3" type="number" step="1" placeholder="severe_reports">
+        </div>
+        <div class="form-row" style="grid-template-columns: 1fr; margin-top: 12px;">
+            <button id="push-button">Envoyer vers la BDD</button>
+        </div>
+        <div class="status" id="push-status">Aucune donnée envoyée pour le moment.</div>
+    </div>
+
+    <script>
+        // --- 1. INITIALISATION DES GRAPHIQUES ---
+        const ctxRisk = document.getElementById('riskChart').getContext('2d');
+        const riskChart = new Chart(ctxRisk, {
+            type: 'bar',
+            data: { labels: [], datasets: [{ label: 'Score de Risque', data: [], backgroundColor: '#e74c3c' }] },
+            options: { indexAxis: 'y', responsive: true } // Barres horizontales
+        });
+
+        const ctxTime = document.getElementById('timeChart').getContext('2d');
+        const timeChart = new Chart(ctxTime, {
+            type: 'line',
+            data: { 
+                labels: [], 
+                datasets: [
+                    { label: 'Cas Totaux', data: [], borderColor: '#3498db', fill: false },
+                    { label: 'Cas Graves', data: [], borderColor: '#9b59b6', fill: false }
+                ] 
+            },
+            options: { responsive: true }
+        });
+
+        const dataTypeSelect = document.getElementById('data-type');
+        const field1 = document.getElementById('field-1');
+        const field2 = document.getElementById('field-2');
+        const field3 = document.getElementById('field-3');
+        const pushStatus = document.getElementById('push-status');
+        const pushButton = document.getElementById('push-button');
+
+        function syncFormLabels() {
+            if (dataTypeSelect.value === 'risk') {
+                field1.placeholder = 'Nom du médicament';
+                field2.placeholder = 'Score de risque';
+                field3.value = '';
+                field3.disabled = true;
+            } else {
+                field1.placeholder = 'Mois de rapport (ex: 2026-07)';
+                field2.placeholder = 'Cas totaux';
+                field3.placeholder = 'Cas graves';
+                field3.disabled = false;
+            }
+        }
+
+        dataTypeSelect.addEventListener('change', syncFormLabels);
+        syncFormLabels();
+
+        async function pushData() {
+            const dataType = dataTypeSelect.value;
+            const payload = { type: dataType };
+
+            if (dataType === 'risk') {
+                payload.drug_name = field1.value.trim();
+                payload.custom_risk_score = field2.value;
+            } else {
+                payload.report_month = field1.value.trim();
+                payload.total_reports = field2.value;
+                payload.severe_reports = field3.value;
+            }
+
+            const response = await fetch('/api/push-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Erreur inconnue');
+            }
+
+            pushStatus.innerText = '✅ ' + result.message;
+            field1.value = '';
+            field2.value = '';
+            field3.value = '';
+            updateDashboard();
+        }
+
+        pushButton.addEventListener('click', async () => {
+            pushStatus.innerText = '⏳ Envoi en cours...';
+            try {
+                await pushData();
+            } catch (error) {
+                pushStatus.innerText = '❌ ' + error.message;
+            }
+        });
+
+        // --- 2. FONCTION DE MISE À JOUR (POLLING) ---
+        async function updateDashboard() {
+            try {
+                // Interroger l'API Flask pour les scores de risque
+                const resRisk = await fetch('/api/risk-scores');
+                const dataRisk = await resRisk.json();
+                
+                // Injection des données dans Chart.js
+                riskChart.data.labels = dataRisk.map(item => item.drug_name);
+                riskChart.data.datasets[0].data = dataRisk.map(item => item.custom_risk_score);
+                riskChart.update(); // Animation de mise à jour du graphique
+
+                // Interroger l'API Flask pour l'analyse temporelle
+                const resTime = await fetch('/api/temporal-data');
+                const dataTime = await resTime.json();
+
+                timeChart.data.labels = dataTime.map(item => item.report_month);
+                timeChart.data.datasets[0].data = dataTime.map(item => item.total_reports);
+                timeChart.data.datasets[1].data = dataTime.map(item => item.severe_reports);
+                timeChart.update();
+
+                document.getElementById('status-text').innerText = "🔄 Dernière synchronisation NoSQL : " + new Date().toLocaleTimeString();
+            } catch (error) {
+                document.getElementById('status-text').innerText = "❌ Erreur : Impossible de joindre le serveur Flask";
+            }
+        }
+
+        // Configuration du Polling : On rafraîchit toutes les 2 secondes (2000 ms)
+        setInterval(updateDashboard, 2000);
+        
+        // Premier chargement immédiat au démarrage de la page
+        updateDashboard();
+    </script>
+</body>
+</html>
