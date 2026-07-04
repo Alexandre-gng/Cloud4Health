@@ -1,6 +1,10 @@
 
 __pycache__/
 venv/
+.vscode/
+checkpoints/
+checkpoints_streaming_v2/
+dossier_flux/
 
 assignement.txt
 *.pdf
