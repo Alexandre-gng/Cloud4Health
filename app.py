@@ -20,9 +20,43 @@ def index():
 
 @app.route('/api/risk-scores', methods=['GET'])
 def get_risk_scores():
-    """Récupère le Top 10 des médicaments les plus à risque"""
-    # On exclut l'ID interne de Mongo (_id: 0) pour éviter les erreurs de sérialisation JSON
+    """Top 10 most severe drugs based on custom risk score."""
     cursor = db["drug_risk_scores"].find({}, {"_id": 0}).sort("custom_risk_score", DESCENDING).limit(10)
+    return jsonify(list(cursor))
+
+
+@app.route('/api/top-reported-drugs', methods=['GET'])
+def get_top_reported_drugs():
+    """Récupère les médicaments les plus signalés."""
+    cursor = db["top_reported_drugs"].find({}, {"_id": 0}).sort("total_reports", DESCENDING).limit(10)
+    return jsonify(list(cursor))
+
+
+@app.route('/api/severe-reported-drugs', methods=['GET'])
+def get_severe_reported_drugs():
+    """Récupère les médicaments qui génèrent le plus de signalements graves."""
+    cursor = db["severe_reported_drugs"].find({}, {"_id": 0}).sort("severe_reports", DESCENDING).limit(10)
+    return jsonify(list(cursor))
+
+
+@app.route('/api/frequent-adverse-events', methods=['GET'])
+def get_frequent_adverse_events():
+    """Récupère les événements indésirables les plus fréquents."""
+    cursor = db["frequent_adverse_events"].find({}, {"_id": 0}).sort("event_count", DESCENDING).limit(10)
+    return jsonify(list(cursor))
+
+
+@app.route('/api/severe-adverse-events', methods=['GET'])
+def get_severe_adverse_events():
+    """Récupère les événements indésirables les plus sévères."""
+    cursor = db["severe_adverse_events"].find({}, {"_id": 0}).sort("avg_seriousness_score", DESCENDING).limit(10)
+    return jsonify(list(cursor))
+
+
+@app.route('/api/hospitalization-signals', methods=['GET'])
+def get_hospitalization_signals():
+    """Récupère les couples médicament / événement liés à l'hospitalisation."""
+    cursor = db["hospitalization_signals"].find({}, {"_id": 0}).sort("hospitalization_count", DESCENDING).limit(10)
     return jsonify(list(cursor))
 
 @app.route('/api/temporal-data', methods=['GET'])

@@ -1,0 +1,16 @@
+# Utilisation d'une image de base Spark avec Python
+FROM bitnamilegacy/spark:3.5
+
+USER root
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Définition du répertoire de travail
+WORKDIR /app
+
+# Copie des scripts Spark (batch et streaming) dans le conteneur
+COPY . /app
+
+# Commande par défaut lançant l'application via spark-submit en incluant le connecteur MongoDB
+CMD ["spark-submit", "--packages", "org.mongodb.spark:mongo-spark-connector_2.13:10.5.0", "main.py"]

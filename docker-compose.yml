@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  # Base de données MongoDB NoSQL
+  mongo_pharmacovigilance:
+    image: mongo:latest
+    container_name: mongo_pharmacovigilance
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - cloud4health_net
+
+  # Traitement analytique distribué Spark
+  spark_app:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: spark_app
+    depends_on:
+      - mongo_pharmacovigilance
+    environment:
+      MONGO_URI: mongodb://mongo_pharmacovigilance:27017/pharmacovigilance
+    volumes:
+      # Montage du volume pour le dossier de flux de données
+      - ./dossier_flux:/app/dossier_flux
+    networks:
+      - cloud4health_net
+
+networks:
+  cloud4health_net:
+    driver: bridge
+
+volumes:
+  mongo_data:

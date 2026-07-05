@@ -18,11 +18,14 @@ from pymongo import MongoClient, UpdateOne
 # surveille ce dossier et traite chaque nouveau fichier dès son apparition.
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 INPUT_DIR = os.path.join(ROOT_DIR, "dossier_flux")
-CHECKPOINT_DIR = os.path.join(ROOT_DIR, "checkpoints_streaming_v2")
+CHECKPOINT_DIR = os.path.join(ROOT_DIR, "checkpoints_streaming_v3")
 
-MONGO_URI = "mongodb://127.0.0.1:27017/pharmacovigilance"
+# If in an image:
+# MONGO_URI = "mongodb://mongo_pharmacovigilance:27017/pharmacovigilance"
+# If not in an image (local dev):
+# MONGO_URI = "mongodb://127.0.0.1:27017/pharmacovigilance"
+MONGO_URI = os.environ.get("MONGO_URI", "mongodb://127.0.0.1:27017/pharmacovigilance")
 MONGO_PACKAGE = "org.mongodb.spark:mongo-spark-connector_2.13:10.5.0"
-MONGO_HOST = "mongodb://127.0.0.1:27017/"
 
 os.makedirs(INPUT_DIR, exist_ok=True)
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
@@ -115,8 +118,9 @@ def process_microbatch(batch_df, batch_id):
     severe_labels = ["Severe", "High", "Grave"]
     hospitalization_condition = F.lower(F.col("outcome")).contains("hospital")
 
-    mongo_client = MongoClient(MONGO_HOST)
-    db = mongo_client["pharmacovigilance"]
+    mongo_client = MongoClient(MONGO_URI)
+    default_db = mongo_client.get_default_database()
+    db = default_db if default_db is not None else mongo_client["pharmacovigilance"]
 
     try:
         drug_counts = batch.groupBy("drug_name").agg(F.count("report_id").alias("total_reports")).collect()
